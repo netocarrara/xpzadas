@@ -168,7 +168,7 @@ function renderPlayers(data) {
 
 function renderParties(data) {
   state.dashboard = data;
-  els.partyHint.textContent = data.hasPrevious ? "analise desde a ultima leitura diferente" : "aguardando duas leituras para avaliar desempenho";
+  els.partyHint.textContent = data.hasPrevious ? "analise desde a base das 10:30" : "aguardando a segunda leitura do ciclo";
   els.parties.innerHTML = "";
 
   if (!data.parties.length) {
@@ -230,7 +230,7 @@ function renderDashboard(data) {
   setLeader("highest", data.leaders.highest, "total");
   setLeader("bestGain", data.leaders.bestGain, "gain");
   setLeader("worstGain", data.leaders.worstGain, "gain");
-  els.basis.textContent = data.hasPrevious ? "2 leituras" : "1 leitura";
+  els.basis.textContent = data.hasPrevious ? "ciclo 10:30" : "base do ciclo";
   els.timeMeta.textContent = data.update?.message || data.updatedAt || data.checkedAt || "aguardando snapshot";
   renderPlayers(data);
   renderParties(data);

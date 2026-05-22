@@ -33,6 +33,9 @@ from xp_bot import (
     load_data,
     normalize_name,
     open_rubinot_verification_browser,
+    parse_rank_history_time,
+    rank_cycle_bounds,
+    rank_cycle_key,
     ranking_snapshot,
     resolve_world_id,
     save_data,
@@ -44,6 +47,7 @@ WEB_DIR = Path("web")
 UPDATE_LOCK = threading.Lock()
 DEFAULT_DASHBOARD_LIMIT = 100
 DEFAULT_RANK_WORLD = "Grimoria ll"
+DEFAULT_MIN_READING_PLAYERS = 50
 SESSIONS: dict[str, float] = {}
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
@@ -61,6 +65,64 @@ def safe_save_data(data: dict) -> None:
     except OSError:
         # Serverless hosts such as Vercel should treat Supabase as the durable store.
         pass
+
+
+def min_reading_players() -> int:
+    try:
+        configured = int(os.getenv("RANKZADA_MIN_READING_PLAYERS", DEFAULT_MIN_READING_PLAYERS))
+    except ValueError:
+        configured = DEFAULT_MIN_READING_PLAYERS
+    return max(1, configured)
+
+
+def reading_player_count(reading: dict) -> int:
+    players = reading.get("players", {})
+    return len(players) if isinstance(players, dict) else 0
+
+
+def valid_rank_history(history: list[dict]) -> list[dict]:
+    minimum = min_reading_players()
+    return [reading for reading in history if reading_player_count(reading) >= minimum]
+
+
+def current_cycle_history(history: list[dict]) -> list[dict]:
+    start, end = rank_cycle_bounds()
+    result = []
+    for reading in history:
+        checked_at = parse_rank_history_time(reading)
+        if checked_at and start <= checked_at < end:
+            result.append(reading)
+    return result
+
+
+def parse_history_time(reading: dict) -> float:
+    parsed = parse_rank_history_time(reading)
+    return parsed.timestamp() if parsed else 0
+
+
+def pick_rank_history(local_history: list[dict], supabase_history: list[dict]) -> tuple[list[dict], str]:
+    local_history = current_cycle_history(valid_rank_history(local_history))
+    supabase_history = current_cycle_history(valid_rank_history(supabase_history))
+    merged: dict[tuple, dict] = {}
+    sources: set[str] = set()
+
+    for source, history in (("local", local_history), ("supabase", supabase_history)):
+        if history:
+            sources.add(source)
+        for reading in history:
+            signature = snapshot_signature(reading)
+            if not signature:
+                continue
+
+            current = merged.get(signature)
+            if current is None or parse_history_time(reading) >= parse_history_time(current):
+                merged[signature] = reading
+
+    if not merged:
+        return [], "local"
+
+    source_name = "+".join(source for source in ("local", "supabase") if source in sources)
+    return sorted(merged.values(), key=parse_history_time), source_name or "local"
 
 
 def format_bucket(data: dict) -> str:
@@ -203,27 +265,27 @@ def dashboard_payload(query: dict) -> dict:
     data = load_data()
     bucket = query.get("bucket", [format_bucket(data)])[0]
     limit = dashboard_limit(query)
-    history = data.get("rank_history", {}).get(bucket, [])
-
-    source = "local"
-    if not history and supabase_configured():
+    local_history = data.get("rank_history", {}).get(bucket, [])
+    supabase_history = []
+    if supabase_configured():
         try:
-            history = load_rank_history(bucket, limit=3)
-            source = "supabase" if history else "local"
+            supabase_history = load_rank_history(bucket, limit=288)
         except Exception:
-            history = []
+            supabase_history = []
+    history, source = pick_rank_history(local_history, supabase_history)
 
     if not history and data.get("rank_snapshots", {}).get(bucket):
-        history = [
+        fallback_history = [
             {
                 "checked_at": "",
                 "updated_at": "",
                 "players": data["rank_snapshots"][bucket],
             }
         ]
+        history, source = pick_rank_history(fallback_history, [])
 
     current = history[-1] if history else {"players": {}}
-    previous = previous_distinct_reading(history, current)
+    previous = cycle_base_reading(history, current)
     all_rows = player_rows(current, previous)
     rows = all_rows[:limit]
     gain_rows = [row for row in rows if row["gainSinceLast"] is not None]
@@ -240,6 +302,9 @@ def dashboard_payload(query: dict) -> dict:
         "rubinotPageUrl": os.getenv("RUBINOT_BASE_URL", DEFAULT_RUBINOT_BASE_URL).rstrip("/") + "/highscores",
         "updatedAt": current.get("updated_at", ""),
         "checkedAt": current.get("checked_at", ""),
+        "cycleKey": rank_cycle_key(),
+        "cycleStart": rank_cycle_bounds()[0].isoformat(timespec="minutes"),
+        "cycleEnd": rank_cycle_bounds()[1].isoformat(timespec="minutes"),
         "hasPrevious": bool(previous.get("players")),
         "players": rows,
         "parties": party_rows(data, all_rows, previous),
@@ -275,6 +340,14 @@ def snapshot_signature(reading: dict) -> tuple:
 def previous_distinct_reading(history: list[dict], current: dict) -> dict:
     current_signature = snapshot_signature(current)
     for reading in reversed(history[:-1]):
+        if snapshot_signature(reading) != current_signature:
+            return reading
+    return {}
+
+
+def cycle_base_reading(history: list[dict], current: dict) -> dict:
+    current_signature = snapshot_signature(current)
+    for reading in history[:-1]:
         if snapshot_signature(reading) != current_signature:
             return reading
     return {}
@@ -512,6 +585,12 @@ def save_ranking_entries(entries: list, bucket: str, category: int, world: str, 
     data = load_data()
     if not entries:
         raise RuntimeError("Nenhum player encontrado na leitura importada.")
+    minimum = min_reading_players()
+    if len(entries) < minimum:
+        raise RuntimeError(
+            f"Leitura incompleta: recebi {len(entries)} player(s), mas o minimo para salvar e {minimum}. "
+            "Abra o JSON completo do RubinOT e importe novamente."
+        )
 
     data.setdefault("rank_snapshots", {})[bucket] = ranking_snapshot(entries)
     before_count = len(data.get("rank_history", {}).get(bucket, []))

@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict
 
-from xp_bot import RankingEntry, now_text, normalize_name
+from xp_bot import RankingEntry, normalize_name, now_rank_text
 
 
 def supabase_configured() -> bool:
@@ -179,7 +179,7 @@ def save_rank_reading(
             "bucket": bucket,
             "category": category,
             "world": world,
-            "checked_at": now_text(),
+            "checked_at": now_rank_text(),
             "updated_at": entries[0].updated_at,
         },
     )[0]
@@ -256,7 +256,7 @@ def load_rank_history(bucket: str, limit: int = 3) -> list[dict]:
         f"?bucket=eq.{quote(bucket, safe='')}"
         "&select=id,bucket,checked_at,updated_at"
         "&order=checked_at.desc"
-        f"&limit={max(1, min(limit, 10))}"
+        f"&limit={max(1, min(limit, 300))}"
     )
     if not readings:
         return []

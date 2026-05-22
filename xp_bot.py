@@ -3,11 +3,12 @@ import json
 import os
 import re
 from dataclasses import dataclass, asdict
-from datetime import date, datetime
+from datetime import date, datetime, time as datetime_time, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Optional
 from html import unescape
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import aiohttp
 import discord
@@ -25,6 +26,8 @@ MAX_HIGHSCORE_PAGES = 20
 DEFAULT_INTERVAL_MINUTES = 5
 DEFAULT_RANK_LIMIT = 10
 MAX_RANK_HISTORY_ITEMS = 288
+DEFAULT_RANK_CYCLE_START = "10:30"
+DEFAULT_RANK_TIMEZONE = "America/Sao_Paulo"
 
 WORLD_IDS = {
     "grimoria ii": "27",
@@ -94,8 +97,84 @@ def now_text() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def now_rank_text() -> str:
+    return datetime.now(configured_rank_timezone()).isoformat(timespec="seconds")
+
+
 def now_ts() -> float:
     return datetime.now().timestamp()
+
+
+def configured_rank_cycle_start() -> datetime_time:
+    raw = os.getenv("RANKZADA_RANK_CYCLE_START", DEFAULT_RANK_CYCLE_START).strip()
+    try:
+        hour, minute = raw.split(":", 1)
+        return datetime_time(hour=max(0, min(23, int(hour))), minute=max(0, min(59, int(minute))))
+    except ValueError:
+        return datetime_time(10, 30)
+
+
+def configured_rank_timezone() -> tzinfo:
+    raw = os.getenv("RANKZADA_TIMEZONE", DEFAULT_RANK_TIMEZONE).strip() or DEFAULT_RANK_TIMEZONE
+    try:
+        return ZoneInfo(raw)
+    except ZoneInfoNotFoundError:
+        return timezone(timedelta(hours=-3), DEFAULT_RANK_TIMEZONE)
+
+
+def rank_cycle_bounds(reference: Optional[datetime] = None) -> tuple[datetime, datetime]:
+    timezone = configured_rank_timezone()
+    reference = reference or datetime.now(timezone)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone)
+    else:
+        reference = reference.astimezone(timezone)
+    start_time = configured_rank_cycle_start()
+    start = datetime.combine(reference.date(), start_time)
+    start = start.replace(tzinfo=timezone)
+    if reference < start:
+        start -= timedelta(days=1)
+    return start, start + timedelta(days=1)
+
+
+def parse_rank_history_time(reading: dict) -> Optional[datetime]:
+    raw = str(reading.get("checked_at") or reading.get("updated_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    timezone = configured_rank_timezone()
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone)
+    return parsed.astimezone(timezone)
+
+
+def rank_cycle_key(reference: Optional[datetime] = None) -> str:
+    start, _ = rank_cycle_bounds(reference)
+    return start.date().isoformat()
+
+
+def rank_history_in_current_cycle(data: dict, bucket: str, reference: Optional[datetime] = None) -> list[dict]:
+    start, end = rank_cycle_bounds(reference)
+    history = data.get("rank_history", {}).get(bucket, [])
+    result = []
+    for reading in history:
+        checked_at = parse_rank_history_time(reading)
+        if checked_at and start <= checked_at < end:
+            result.append(reading)
+    return result
+
+
+def rank_cycle_base_snapshot(data: dict, bucket: str, current: Optional[dict[str, dict]] = None) -> dict[str, dict]:
+    history = rank_history_in_current_cycle(data, bucket)
+    if not history:
+        return {}
+    base = history[0].get("players", {})
+    if current is not None and base == current:
+        return {}
+    return base
 
 
 def normalize_name(name: str) -> str:
@@ -616,7 +695,7 @@ def ranking_snapshot(entries: list[RankingEntry]) -> dict[str, dict]:
             "world": entry.world,
             "points": entry.points,
             "updated_at": entry.updated_at,
-            "checked_at": now_text(),
+            "checked_at": now_rank_text(),
         }
         for entry in entries
     }
@@ -637,11 +716,11 @@ def append_rank_history(data: dict, bucket: str, entries: list[RankingEntry]) ->
             for key, player in snapshot.items()
         )
         if same_update and same_points:
-            last["checked_at"] = now_text()
+            last["checked_at"] = now_rank_text()
             last["players"] = snapshot
             return
 
-    history.append({"checked_at": now_text(), "updated_at": entries[0].updated_at, "players": snapshot})
+    history.append({"checked_at": now_rank_text(), "updated_at": entries[0].updated_at, "players": snapshot})
     if len(history) > MAX_RANK_HISTORY_ITEMS:
         del history[:-MAX_RANK_HISTORY_ITEMS]
 
@@ -757,7 +836,8 @@ async def maybe_send_rank_update(data: dict) -> None:
     else:
         error_text = ""
     bucket = snapshot_bucket_key(category, world)
-    previous = data.setdefault("rank_snapshots", {}).get(bucket, {})
+    current_snapshot = ranking_snapshot(entries) if entries else {}
+    previous = rank_cycle_base_snapshot(data, bucket, current_snapshot)
 
     channel = bot.get_channel(int(channel_id))
     if channel:
@@ -767,7 +847,7 @@ async def maybe_send_rank_update(data: dict) -> None:
             await channel.send(build_rank_update_report(entries, previous, limit, world))
 
     if entries:
-        data["rank_snapshots"][bucket] = ranking_snapshot(entries)
+        data["rank_snapshots"][bucket] = current_snapshot
         append_rank_history(data, bucket, entries)
     data["config"]["rank_last_sent"] = now_ts()
     save_data(data)
@@ -890,10 +970,11 @@ async def top_diario(
         await interaction.followup.send(f"Nao consegui ler o ranking do RubinOT agora: {exc}")
         return
     bucket = snapshot_bucket_key(selected_category, selected_world)
-    previous = data.setdefault("rank_snapshots", {}).get(bucket, {})
+    current_snapshot = ranking_snapshot(entries)
+    previous = rank_cycle_base_snapshot(data, bucket, current_snapshot)
 
     if salvar_leitura:
-        data["rank_snapshots"][bucket] = ranking_snapshot(entries)
+        data["rank_snapshots"][bucket] = current_snapshot
         append_rank_history(data, bucket, entries)
         save_data(data)
 
