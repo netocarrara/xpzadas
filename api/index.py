@@ -22,6 +22,7 @@ try:
         is_authenticated,
         login as dashboard_login,
         logout as dashboard_logout,
+        browser_verification_enabled,
         open_verification,
         parties_payload,
         public_update_enabled,
@@ -186,12 +187,11 @@ def api_update_ranking():
 
 @app.post("/api/open-rubinot")
 def api_open_rubinot():
-    if os.getenv("RANKZADA_ALLOW_BROWSER_VERIFICATION", "false").strip().lower() not in {"1", "true", "yes", "sim"}:
+    if not browser_verification_enabled():
         return json_error(400, "Verificacao por navegador esta desativada neste ambiente.")
     try:
         return jsonify(open_verification())
     except Exception as exc:
         return json_error(500, str(exc))
-
 
 

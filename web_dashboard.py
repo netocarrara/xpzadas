@@ -23,6 +23,7 @@ from supabase_store import (
 from xp_bot import (
     DATA_FILE,
     append_rank_history,
+    browser_fallback_enabled,
     fetch_ranking_entries,
     get_daily_category,
     load_data,
@@ -344,6 +345,14 @@ def public_update_enabled() -> bool:
     return os.getenv("RANKZADA_PUBLIC_UPDATE", "false").strip().lower() in {"1", "true", "yes", "sim"}
 
 
+def browser_verification_enabled() -> bool:
+    return (
+        os.getenv("RANKZADA_ALLOW_BROWSER_VERIFICATION", "false").strip().lower()
+        in {"1", "true", "yes", "sim"}
+        or browser_fallback_enabled()
+    )
+
+
 def login(handler: SimpleHTTPRequestHandler) -> None:
     payload = read_json_body(handler)
     user = os.getenv("RANKZADA_ADMIN_USER", "admin")
@@ -459,7 +468,7 @@ def perform_update_ranking() -> dict:
     world = config.get("rank_world", "")
     bucket = snapshot_bucket_key(category, world)
 
-    entries = asyncio.run(fetch_ranking_entries(category, pages=1, world=world, allow_browser_fallback=False))
+    entries = asyncio.run(fetch_ranking_entries(category, pages=1, world=world, allow_browser_fallback=True))
     data.setdefault("rank_snapshots", {})[bucket] = ranking_snapshot(entries)
     before_count = len(data.get("rank_history", {}).get(bucket, []))
     append_rank_history(data, bucket, entries)
@@ -564,7 +573,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/open-rubinot":
-            if os.getenv("RANKZADA_ALLOW_BROWSER_VERIFICATION", "false").strip().lower() not in {"1", "true", "yes", "sim"}:
+            if not browser_verification_enabled():
                 json_response(self, 400, {"ok": False, "error": "Verificacao por navegador esta desativada neste ambiente."})
                 return
             try:
