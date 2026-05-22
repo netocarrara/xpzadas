@@ -43,8 +43,16 @@ from xp_bot import (
 WEB_DIR = Path("web")
 UPDATE_LOCK = threading.Lock()
 DEFAULT_DASHBOARD_LIMIT = 100
+DEFAULT_RANK_WORLD = "Grimoria ll"
 SESSIONS: dict[str, float] = {}
 SESSION_TTL_SECONDS = 8 * 60 * 60
+
+
+def configured_rank_world(data: dict) -> str:
+    return (
+        data.get("config", {}).get("rank_world", "")
+        or os.getenv("RUBINOT_DEFAULT_WORLD", DEFAULT_RANK_WORLD)
+    ).strip()
 
 
 def safe_save_data(data: dict) -> None:
@@ -56,9 +64,8 @@ def safe_save_data(data: dict) -> None:
 
 
 def format_bucket(data: dict) -> str:
-    config = data.get("config", {})
     category = get_daily_category(data)
-    world = config.get("rank_world", "")
+    world = configured_rank_world(data)
     return snapshot_bucket_key(category, world)
 
 
@@ -228,7 +235,7 @@ def dashboard_payload(query: dict) -> dict:
         "totalPlayers": len(all_rows),
         "source": source,
         "supabaseConfigured": supabase_configured(),
-        "world": data.get("config", {}).get("rank_world", ""),
+        "world": configured_rank_world(data),
         "rubinotImportUrl": rubinot_import_url(data),
         "updatedAt": current.get("updated_at", ""),
         "checkedAt": current.get("checked_at", ""),
@@ -245,7 +252,7 @@ def dashboard_payload(query: dict) -> dict:
 
 def rubinot_import_url(data: dict) -> str:
     category = get_daily_category(data)
-    world = data.get("config", {}).get("rank_world", "")
+    world = configured_rank_world(data)
     api_path = HIGHSCORES_PATH.format(
         category=quote_plus(get_highscore_category(category)),
         world=quote_plus(resolve_world_id(world)),
@@ -481,9 +488,8 @@ def update_ranking() -> dict:
 
 def perform_update_ranking() -> dict:
     data = load_data()
-    config = data.get("config", {})
     category = get_daily_category(data)
-    world = config.get("rank_world", "")
+    world = configured_rank_world(data)
     bucket = snapshot_bucket_key(category, world)
 
     entries = asyncio.run(fetch_ranking_entries(category, pages=1, world=world, allow_browser_fallback=True))
@@ -536,9 +542,8 @@ def import_ranking(payload: dict) -> dict:
         raise RuntimeError("Nao encontrei a lista players no JSON colado.")
 
     data = load_data()
-    config = data.get("config", {})
     category = get_daily_category(data)
-    world = config.get("rank_world", "")
+    world = configured_rank_world(data)
     bucket = snapshot_bucket_key(category, world)
     entries = api_entries(raw_payload)
     return save_ranking_entries(entries, bucket, category, world, "Leitura importada com {count} players.")

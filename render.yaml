@@ -19,6 +19,8 @@ services:
         value: "7"
       - key: RUBINOT_HIGHSCORE_CATEGORY
         value: experience
+      - key: RUBINOT_DEFAULT_WORLD
+        value: Grimoria ll
       - key: RUBINOT_CF_CLEARANCE
         sync: false
       - key: RUBINOT_USER_AGENT
