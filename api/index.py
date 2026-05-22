@@ -183,3 +183,8 @@ def api_open_rubinot():
         return jsonify(open_verification())
     except Exception as exc:
         return json_error(500, str(exc))
+
+
+def handler(request, response):
+    """Vercel Serverless Function Handler"""
+    return app(request.environ, response.start_response)
