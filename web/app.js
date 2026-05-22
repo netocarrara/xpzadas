@@ -31,6 +31,7 @@ const els = {
   importForm: document.querySelector("#importForm"),
   importPayload: document.querySelector("#importPayload"),
   importRanking: document.querySelector("#importRanking"),
+  openRubinotJson: document.querySelector("#openRubinotJson"),
   partyForm: document.querySelector("#partyForm"),
   partyName: document.querySelector("#partyName"),
   partyTarget: document.querySelector("#partyTarget"),
@@ -220,6 +221,7 @@ function renderParties(data) {
 
 function renderDashboard(data) {
   state.bucket = data.bucket;
+  state.rubinotImportUrl = data.rubinotImportUrl || "";
   renderBuckets(data);
   setLeader("highest", data.leaders.highest, "total");
   setLeader("bestGain", data.leaders.bestGain, "gain");
@@ -431,11 +433,23 @@ async function importRanking(event) {
   }
 }
 
+function openRubinotJson() {
+  const url = state.rubinotImportUrl || "https://rubinot.com.br/api/highscores?world=27&category=experience&vocation=0";
+  const popup = window.open(url, "rubinotHighscores", "popup=yes,width=980,height=720");
+  if (!popup) {
+    showStatus("Popup bloqueado", "Permita popups para este site e tente abrir o JSON de novo.");
+    return;
+  }
+  popup.focus();
+  showStatus("JSON aberto", "No popup, use Ctrl+A e Ctrl+C. Depois cole aqui em Importar JSON do RubinOT.");
+}
+
 document.querySelectorAll(".nav-tab").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 els.openRubinot.addEventListener("click", openRubinot);
 els.fetchRanking.addEventListener("click", updateRanking);
+els.openRubinotJson.addEventListener("click", openRubinotJson);
 els.adminToggle.addEventListener("click", () => {
   setView("partyView");
   els.adminPanel.hidden = !els.adminPanel.hidden;

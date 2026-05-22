@@ -8,7 +8,7 @@ import threading
 import time
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 from dotenv import load_dotenv
 
@@ -22,15 +22,19 @@ from supabase_store import (
 )
 from xp_bot import (
     DATA_FILE,
+    DEFAULT_RUBINOT_BASE_URL,
+    HIGHSCORES_PATH,
     append_rank_history,
     api_entries,
     browser_fallback_enabled,
     fetch_ranking_entries,
     get_daily_category,
+    get_highscore_category,
     load_data,
     normalize_name,
     open_rubinot_verification_browser,
     ranking_snapshot,
+    resolve_world_id,
     save_data,
     snapshot_bucket_key,
 )
@@ -225,6 +229,7 @@ def dashboard_payload(query: dict) -> dict:
         "source": source,
         "supabaseConfigured": supabase_configured(),
         "world": data.get("config", {}).get("rank_world", ""),
+        "rubinotImportUrl": rubinot_import_url(data),
         "updatedAt": current.get("updated_at", ""),
         "checkedAt": current.get("checked_at", ""),
         "hasPrevious": bool(previous.get("players")),
@@ -236,6 +241,17 @@ def dashboard_payload(query: dict) -> dict:
             "worstGain": min(gain_rows, key=lambda item: item["gainSinceLast"]) if gain_rows else None,
         },
     }
+
+
+def rubinot_import_url(data: dict) -> str:
+    category = get_daily_category(data)
+    world = data.get("config", {}).get("rank_world", "")
+    api_path = HIGHSCORES_PATH.format(
+        category=quote_plus(get_highscore_category(category)),
+        world=quote_plus(resolve_world_id(world)),
+    )
+    base_url = os.getenv("RUBINOT_BASE_URL", DEFAULT_RUBINOT_BASE_URL).rstrip("/")
+    return base_url + api_path
 
 
 def snapshot_signature(reading: dict) -> tuple:
