@@ -7,10 +7,5 @@
     { "source": "/app.js", "destination": "/web/app.js" },
     { "source": "/styles.css", "destination": "/web/styles.css" },
     { "source": "/", "destination": "/web/index.html" }
-  ],
-  "functions": {
-    "api/index.py": {
-      "excludeFiles": "{.venv/**,__pycache__/**,chrome-profile/**,chrome-profile-rubinot/**,chrome-extension/**,*.log,*.zip,xp_data.json,bot.*.log,web.*.log}"
-    }
-  }
+  ]
 }
