@@ -1,10 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": "web",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/wsgi.py" },
-    { "source": "/health", "destination": "/api/wsgi.py" },
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/health", "destination": "/api" },
     { "source": "/assets/:path*", "destination": "/web/assets/:path*" },
     { "source": "/app.js", "destination": "/web/app.js" },
     { "source": "/styles.css", "destination": "/web/styles.css" },

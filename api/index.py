@@ -12,22 +12,28 @@ if str(ROOT) not in sys.path:
 load_dotenv(ROOT / ".env")
 os.environ.setdefault("RANKZADA_ALLOW_BROWSER_VERIFICATION", "false")
 
-from web_dashboard import (  # noqa: E402
-    SESSION_TTL_SECONDS,
-    auth_status,
-    dashboard_payload,
-    is_authenticated,
-    login as dashboard_login,
-    logout as dashboard_logout,
-    open_verification,
-    parties_payload,
-    public_update_enabled,
-    remove_party,
-    save_party,
-    update_ranking,
-)
-
 app = Flask(__name__)
+
+try:
+    from web_dashboard import (  # noqa: E402
+        SESSION_TTL_SECONDS,
+        auth_status,
+        dashboard_payload,
+        is_authenticated,
+        login as dashboard_login,
+        logout as dashboard_logout,
+        open_verification,
+        parties_payload,
+        public_update_enabled,
+        remove_party,
+        save_party,
+        update_ranking,
+    )
+    IMPORTS_OK = True
+except Exception as e:
+    IMPORTS_OK = False
+    print(f"Error importing web_dashboard: {e}")
+
 
 
 class FlaskRequestAdapter:
@@ -49,11 +55,14 @@ def admin_required() -> bool:
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True})
+    status = "ok" if IMPORTS_OK else "error"
+    return jsonify({"ok": IMPORTS_OK, "status": status})
 
 
 @app.get("/api/dashboard")
 def api_dashboard():
+    if not IMPORTS_OK:
+        return jsonify({"ok": False, "error": "Server initialization error"}), 500
     return jsonify(dashboard_payload(request_query()))
 
 
