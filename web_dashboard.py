@@ -285,6 +285,10 @@ def json_response(handler: SimpleHTTPRequestHandler, status: int, payload: dict)
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
+    origin = handler.headers.get("Origin", "")
+    if origin == os.getenv("RUBINOT_BASE_URL", DEFAULT_RUBINOT_BASE_URL).rstrip("/"):
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Vary", "Origin")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -295,6 +299,13 @@ def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
     if length <= 0:
         return {}
     return json.loads(handler.rfile.read(length).decode("utf-8"))
+
+
+def read_text_body(handler: SimpleHTTPRequestHandler) -> str:
+    length = int(handler.headers.get("Content-Length", "0") or 0)
+    if length <= 0:
+        return ""
+    return handler.rfile.read(length).decode("utf-8")
 
 
 def cookie_value(handler: SimpleHTTPRequestHandler, name: str) -> str:
@@ -550,6 +561,44 @@ def import_ranking(payload: dict) -> dict:
     return save_ranking_entries(entries, bucket, category, world, "Leitura importada com {count} players.")
 
 
+def public_base_url(handler: SimpleHTTPRequestHandler) -> str:
+    configured = os.getenv("RANKZADA_PUBLIC_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+    host = handler.headers.get("X-Forwarded-Host") or handler.headers.get("Host", "")
+    proto = handler.headers.get("X-Forwarded-Proto") or ("https" if host and not host.startswith(("127.", "localhost")) else "http")
+    return f"{proto}://{host}".rstrip("/")
+
+
+def import_bookmarklet(handler: SimpleHTTPRequestHandler) -> dict:
+    data = load_data()
+    api_url = rubinot_import_url(data)
+    api_path = urlparse(api_url).path + ("?" + urlparse(api_url).query if urlparse(api_url).query else "")
+    token = make_session_token(os.getenv("RANKZADA_ADMIN_USER", "admin"))
+    target = public_base_url(handler) + "/api/import-ranking-token"
+    script = (
+        "javascript:(async()=>{"
+        f"const api={json.dumps(api_path)},target={json.dumps(target)},token={json.dumps(token)};"
+        "try{"
+        "const r=await fetch(api,{credentials:'include'});"
+        "const t=await r.text();"
+        "if(!r.ok)throw new Error('RubinOT HTTP '+r.status+': '+t.slice(0,160));"
+        "const up=await fetch(target+'?token='+encodeURIComponent(token),{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:t});"
+        "const out=await up.json().catch(()=>({}));"
+        "if(!up.ok||out.ok===false)throw new Error(out.error||('Rankzada HTTP '+up.status));"
+        "alert(out.update?.message||'Leitura enviada para o Rankzada.');"
+        "}catch(e){alert('Rankzada: '+(e.message||e));}"
+        "})();"
+    )
+    return {"ok": True, "bookmarklet": script}
+
+
+def import_ranking_with_token(token: str, payload: str) -> dict:
+    if not validate_session_token(token):
+        raise PermissionError("Token de importacao invalido ou expirado. Gere o atalho novamente no painel.")
+    return import_ranking({"payload": payload})
+
+
 def open_verification() -> dict:
     profile_dir = open_rubinot_verification_browser()
     return {
@@ -575,6 +624,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/auth":
             json_response(self, 200, auth_status(self))
+            return
+
+        if parsed.path == "/api/import-bookmarklet":
+            if not require_auth(self):
+                return
+            try:
+                json_response(self, 200, import_bookmarklet(self))
+            except Exception as exc:
+                json_response(self, 500, {"ok": False, "error": str(exc)})
             return
 
         if parsed.path == "/api/parties":
@@ -629,6 +687,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 json_response(self, 200, import_ranking(read_json_body(self)))
+            except Exception as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+
+        if parsed.path == "/api/import-ranking-token":
+            try:
+                token = parse_qs(parsed.query).get("token", [""])[0]
+                json_response(self, 200, import_ranking_with_token(token, read_text_body(self)))
+            except PermissionError as exc:
+                json_response(self, 401, {"ok": False, "error": str(exc)})
             except Exception as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
             return

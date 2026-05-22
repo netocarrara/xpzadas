@@ -33,6 +33,8 @@ const els = {
   importRanking: document.querySelector("#importRanking"),
   openRubinotJson: document.querySelector("#openRubinotJson"),
   copyCollectScript: document.querySelector("#copyCollectScript"),
+  copyBookmarklet: document.querySelector("#copyBookmarklet"),
+  bookmarkletLink: document.querySelector("#bookmarkletLink"),
   partyForm: document.querySelector("#partyForm"),
   partyName: document.querySelector("#partyName"),
   partyTarget: document.querySelector("#partyTarget"),
@@ -462,6 +464,30 @@ async function copyCollectScript() {
   }
 }
 
+async function loadBookmarklet() {
+  const response = await fetch("/api/import-bookmarklet", { cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) throw new Error(data.error || "Falha ao gerar atalho.");
+  return data.bookmarklet;
+}
+
+async function copyBookmarklet() {
+  els.copyBookmarklet.disabled = true;
+  els.copyBookmarklet.textContent = "Gerando...";
+  try {
+    const bookmarklet = await loadBookmarklet();
+    els.bookmarkletLink.href = bookmarklet;
+    els.bookmarkletLink.hidden = false;
+    await navigator.clipboard.writeText(bookmarklet);
+    showStatus("Atalho copiado", "Crie um favorito e cole isso no campo URL. Depois, no RubinOT, clique no favorito para enviar direto ao Rankzada.");
+  } catch (error) {
+    showStatus("Nao consegui gerar atalho", error.message || String(error));
+  } finally {
+    els.copyBookmarklet.disabled = false;
+    els.copyBookmarklet.textContent = "Copiar atalho";
+  }
+}
+
 document.querySelectorAll(".nav-tab").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
@@ -469,6 +495,7 @@ els.openRubinot.addEventListener("click", openRubinot);
 els.fetchRanking.addEventListener("click", updateRanking);
 els.openRubinotJson.addEventListener("click", openRubinotJson);
 els.copyCollectScript.addEventListener("click", copyCollectScript);
+els.copyBookmarklet.addEventListener("click", copyBookmarklet);
 els.adminToggle.addEventListener("click", () => {
   setView("partyView");
   els.adminPanel.hidden = !els.adminPanel.hidden;

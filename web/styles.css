@@ -342,6 +342,23 @@ main {
   font-family: Consolas, "Courier New", monospace;
 }
 
+.import-help {
+  margin: -4px 0 12px;
+  color: var(--muted);
+}
+
+.bookmarklet-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px dashed var(--gold);
+  border-radius: 8px;
+  color: var(--gold-2);
+  font-weight: 850;
+  text-decoration: none;
+}
+
 .rank-panel {
   min-width: 0;
 }

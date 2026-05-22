@@ -19,7 +19,9 @@ try:
         SESSION_TTL_SECONDS,
         auth_status,
         dashboard_payload,
+        import_bookmarklet,
         import_ranking,
+        import_ranking_with_token,
         is_authenticated,
         login as dashboard_login,
         logout as dashboard_logout,
@@ -48,7 +50,17 @@ def request_query() -> dict[str, list[str]]:
 
 
 def json_error(status: int, message: str):
-    return jsonify({"ok": False, "error": message}), status
+    response = jsonify({"ok": False, "error": message})
+    add_cors(response)
+    return response, status
+
+
+def add_cors(response):
+    origin = request.headers.get("Origin", "")
+    if origin == os.getenv("RUBINOT_BASE_URL", "https://rubinot.com.br").rstrip("/"):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 def admin_required() -> bool:
@@ -196,6 +208,27 @@ def api_import_ranking():
         return json_error(400, str(exc))
 
 
+@app.get("/api/import-bookmarklet")
+def api_import_bookmarklet():
+    if not admin_required():
+        return json_error(401, "Login necessario.")
+    try:
+        return jsonify(import_bookmarklet(FlaskRequestAdapter()))
+    except Exception as exc:
+        return json_error(500, str(exc))
+
+
+@app.post("/api/import-ranking-token")
+def api_import_ranking_token():
+    try:
+        response = jsonify(import_ranking_with_token(request.args.get("token", ""), request.get_data(as_text=True)))
+        return add_cors(response)
+    except PermissionError as exc:
+        return json_error(401, str(exc))
+    except Exception as exc:
+        return json_error(400, str(exc))
+
+
 @app.post("/api/open-rubinot")
 def api_open_rubinot():
     if not browser_verification_enabled():
@@ -204,4 +237,3 @@ def api_open_rubinot():
         return jsonify(open_verification())
     except Exception as exc:
         return json_error(500, str(exc))
-
