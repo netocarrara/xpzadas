@@ -338,6 +338,7 @@ def auth_status(handler: SimpleHTTPRequestHandler) -> dict:
         "user": os.getenv("RANKZADA_ADMIN_USER", "admin"),
         "configured": bool(os.getenv("RANKZADA_ADMIN_PASSWORD", "").strip()),
         "publicUpdate": public_update_enabled(),
+        "browserVerification": browser_verification_enabled(),
     }
 
 

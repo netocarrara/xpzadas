@@ -40,12 +40,13 @@ const els = {
 
 let isAdmin = false;
 let publicUpdate = false;
+let browserVerification = false;
 
 function showStatus(title, text, needsVerification = false) {
   els.statusPanel.hidden = false;
   els.statusTitle.textContent = title;
   els.statusText.textContent = text;
-  els.openRubinot.hidden = !needsVerification;
+  els.openRubinot.hidden = !needsVerification || !browserVerification;
 }
 
 function hideStatus() {
@@ -248,6 +249,7 @@ async function loadAuth() {
   const response = await fetch("/api/auth", { cache: "no-store" });
   const data = await response.json();
   publicUpdate = Boolean(data.publicUpdate);
+  browserVerification = Boolean(data.browserVerification);
   setAdminUi(Boolean(data.authenticated));
 }
 
@@ -360,10 +362,17 @@ async function updateRanking() {
   } catch (error) {
     const message = error.message || String(error);
     await loadDashboard().catch(() => {});
+    const cloudflareBlocked = isCloudflareError(message);
     showStatus(
-      isCloudflareError(message) ? "Cloudflare pediu verificacao" : "Nao consegui atualizar",
-      isCloudflareError(message) ? "A consulta invisivel foi bloqueada. Clique em Resolver Cloudflare apenas uma vez e depois atualize de novo." : message,
-      isCloudflareError(message)
+      cloudflareBlocked ? "Cloudflare bloqueou a consulta" : "Nao consegui atualizar",
+      cloudflareBlocked
+        ? (
+            browserVerification
+              ? "A consulta invisivel foi bloqueada. Clique em Resolver Cloudflare uma vez e depois atualize de novo."
+              : "No Render, atualize RUBINOT_CF_CLEARANCE e RUBINOT_USER_AGENT nas variaveis de ambiente e faca redeploy."
+          )
+        : message,
+      cloudflareBlocked
     );
   } finally {
     els.fetchRanking.disabled = false;
