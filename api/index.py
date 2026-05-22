@@ -19,6 +19,7 @@ try:
         SESSION_TTL_SECONDS,
         auth_status,
         dashboard_payload,
+        import_ranking,
         is_authenticated,
         login as dashboard_login,
         logout as dashboard_logout,
@@ -185,6 +186,16 @@ def api_update_ranking():
         return json_error(500, str(exc))
 
 
+@app.post("/api/import-ranking")
+def api_import_ranking():
+    if not admin_required():
+        return json_error(401, "Login necessario.")
+    try:
+        return jsonify(import_ranking(request.get_json(silent=True) or {}))
+    except Exception as exc:
+        return json_error(400, str(exc))
+
+
 @app.post("/api/open-rubinot")
 def api_open_rubinot():
     if not browser_verification_enabled():
@@ -193,5 +204,4 @@ def api_open_rubinot():
         return jsonify(open_verification())
     except Exception as exc:
         return json_error(500, str(exc))
-
 

@@ -28,6 +28,9 @@ const els = {
   loginForm: document.querySelector("#loginForm"),
   loginUser: document.querySelector("#loginUser"),
   loginPassword: document.querySelector("#loginPassword"),
+  importForm: document.querySelector("#importForm"),
+  importPayload: document.querySelector("#importPayload"),
+  importRanking: document.querySelector("#importRanking"),
   partyForm: document.querySelector("#partyForm"),
   partyName: document.querySelector("#partyName"),
   partyTarget: document.querySelector("#partyTarget"),
@@ -239,6 +242,7 @@ function setAdminUi(authenticated) {
   els.adminToggle.textContent = authenticated ? "Admin ativo" : "Admin";
   els.adminStat.textContent = authenticated ? "ativo" : "bloqueado";
   els.loginForm.hidden = authenticated;
+  els.importForm.hidden = !authenticated;
   els.partyForm.hidden = !authenticated;
   els.fetchRanking.disabled = !authenticated && !publicUpdate;
   els.fetchRanking.title = els.fetchRanking.disabled ? "Entre como admin para atualizar o ranking." : "";
@@ -396,6 +400,37 @@ async function openRubinot() {
   }
 }
 
+async function importRanking(event) {
+  event.preventDefault();
+  const payload = els.importPayload.value.trim();
+  if (!payload) {
+    showStatus("JSON vazio", "Cole a resposta da requisicao highscores do RubinOT.");
+    return;
+  }
+
+  els.importRanking.disabled = true;
+  els.importRanking.textContent = "Importando...";
+  try {
+    JSON.parse(payload);
+    const response = await fetch("/api/import-ranking", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload })
+    });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) throw new Error(data.error || "Falha ao importar leitura.");
+    els.importPayload.value = "";
+    renderDashboard(data);
+    showStatus(data.update?.duplicate ? "Sem leitura nova ainda" : "Leitura importada", data.update?.message || "Ranking importado.");
+  } catch (error) {
+    showStatus("Nao consegui importar", error.message || String(error), false);
+  } finally {
+    els.importRanking.disabled = false;
+    els.importRanking.textContent = "Importar leitura";
+  }
+}
+
 document.querySelectorAll(".nav-tab").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
@@ -406,6 +441,7 @@ els.adminToggle.addEventListener("click", () => {
   els.adminPanel.hidden = !els.adminPanel.hidden;
 });
 els.loginForm.addEventListener("submit", loginAdmin);
+els.importForm.addEventListener("submit", importRanking);
 els.partyForm.addEventListener("submit", saveParty);
 els.clearPartyForm.addEventListener("click", clearPartyForm);
 els.logoutAdmin.addEventListener("click", logoutAdmin);

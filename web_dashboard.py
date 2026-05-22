@@ -23,6 +23,7 @@ from supabase_store import (
 from xp_bot import (
     DATA_FILE,
     append_rank_history,
+    api_entries,
     browser_fallback_enabled,
     fetch_ranking_entries,
     get_daily_category,
@@ -470,6 +471,14 @@ def perform_update_ranking() -> dict:
     bucket = snapshot_bucket_key(category, world)
 
     entries = asyncio.run(fetch_ranking_entries(category, pages=1, world=world, allow_browser_fallback=True))
+    return save_ranking_entries(entries, bucket, category, world, "Leitura nova salva com {count} players.")
+
+
+def save_ranking_entries(entries: list, bucket: str, category: int, world: str, success_message: str) -> dict:
+    data = load_data()
+    if not entries:
+        raise RuntimeError("Nenhum player encontrado na leitura importada.")
+
     data.setdefault("rank_snapshots", {})[bucket] = ranking_snapshot(entries)
     before_count = len(data.get("rank_history", {}).get(bucket, []))
     append_rank_history(data, bucket, entries)
@@ -489,7 +498,7 @@ def perform_update_ranking() -> dict:
     payload["update"] = {
         "ok": True,
         "message": (
-            f"Leitura nova salva com {len(entries)} players."
+            success_message.format(count=len(entries))
             if after_count > before_count
             else "Ranking consultado, mas o RubinOT ainda retornou a mesma leitura. Mantive a base anterior."
         ),
@@ -497,6 +506,26 @@ def perform_update_ranking() -> dict:
         "supabase": supabase,
     }
     return payload
+
+
+def import_ranking(payload: dict) -> dict:
+    raw_payload = payload.get("payload", payload)
+    if isinstance(raw_payload, str):
+        raw_payload = json.loads(raw_payload)
+    if not isinstance(raw_payload, dict):
+        raise RuntimeError("Cole o JSON completo da resposta highscores do RubinOT.")
+
+    raw_entries = raw_payload.get("players")
+    if not isinstance(raw_entries, list):
+        raise RuntimeError("Nao encontrei a lista players no JSON colado.")
+
+    data = load_data()
+    config = data.get("config", {})
+    category = get_daily_category(data)
+    world = config.get("rank_world", "")
+    bucket = snapshot_bucket_key(category, world)
+    entries = api_entries(raw_payload)
+    return save_ranking_entries(entries, bucket, category, world, "Leitura importada com {count} players.")
 
 
 def open_verification() -> dict:
@@ -571,6 +600,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 json_response(self, 200, update_ranking())
             except Exception as exc:
                 json_response(self, 500, {"ok": False, "error": str(exc)})
+            return
+
+        if parsed.path == "/api/import-ranking":
+            if not require_auth(self):
+                return
+            try:
+                json_response(self, 200, import_ranking(read_json_body(self)))
+            except Exception as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
             return
 
         if parsed.path == "/api/open-rubinot":

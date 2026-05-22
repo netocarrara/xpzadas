@@ -126,6 +126,11 @@
               <button class="primary" type="submit">Entrar</button>
             </form>
 
+            <form id="importForm" class="import-form" hidden>
+              <label>Importar JSON do RubinOT<textarea id="importPayload" rows="6" placeholder='{"players":[...]}'></textarea></label>
+              <button id="importRanking" class="secondary" type="submit">Importar leitura</button>
+            </form>
+
             <form id="partyForm" class="party-form" hidden>
               <div class="form-grid">
                 <label>Nome da PT<input id="partyName" placeholder="Minha PT"></label>

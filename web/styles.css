@@ -328,6 +328,16 @@ main {
   padding: 18px;
 }
 
+.import-form {
+  margin-bottom: 16px;
+}
+
+.import-form textarea {
+  min-height: 128px;
+  resize: vertical;
+  font-family: Consolas, "Courier New", monospace;
+}
+
 .rank-panel {
   min-width: 0;
 }
