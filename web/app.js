@@ -241,7 +241,7 @@ async function loadDashboard() {
 
 function setAdminUi(authenticated) {
   isAdmin = authenticated;
-  els.adminToggle.textContent = authenticated ? "Admin ativo" : "Admin";
+  els.adminToggle.textContent = authenticated ? "Painel admin" : "Admin";
   els.adminStat.textContent = authenticated ? "ativo" : "bloqueado";
   els.loginForm.hidden = authenticated;
   els.importForm.hidden = !authenticated;
@@ -359,28 +359,31 @@ async function updateRanking() {
   els.fetchRanking.textContent = "Atualizando...";
   hideStatus();
   els.rankHint.textContent = "Consultando RubinOT e salvando leitura...";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
   try {
-    const response = await fetch("/api/update-ranking", { method: "POST", cache: "no-store" });
+    const response = await fetch("/api/update-ranking", { method: "POST", cache: "no-store", signal: controller.signal });
     const data = await response.json();
     if (!response.ok || data.ok === false) throw new Error(data.error || "Falha ao consultar RubinOT.");
     renderDashboard(data);
     showStatus(data.update?.duplicate ? "Sem leitura nova ainda" : "Ranking atualizado", data.update?.message || "Leitura salva.");
   } catch (error) {
-    const message = error.message || String(error);
+    const message = error.name === "AbortError" ? "A consulta demorou demais no Render." : error.message || String(error);
     await loadDashboard().catch(() => {});
     const cloudflareBlocked = isCloudflareError(message);
     showStatus(
-      cloudflareBlocked ? "Cloudflare bloqueou a consulta" : "Nao consegui atualizar",
-      cloudflareBlocked
+      cloudflareBlocked || error.name === "AbortError" ? "Use a importacao manual" : "Nao consegui atualizar",
+      cloudflareBlocked || error.name === "AbortError"
         ? (
             browserVerification
               ? "A consulta invisivel foi bloqueada. Clique em Resolver Cloudflare uma vez e depois atualize de novo."
-              : "No Render, atualize RUBINOT_CF_CLEARANCE e RUBINOT_USER_AGENT nas variaveis de ambiente e faca redeploy."
+              : "Clique em Abrir JSON do RubinOT, copie tudo do popup e cole em Importar leitura."
           )
         : message,
       cloudflareBlocked
     );
   } finally {
+    clearTimeout(timeout);
     els.fetchRanking.disabled = false;
     els.fetchRanking.textContent = "Atualizar ranking";
   }

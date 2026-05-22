@@ -40,6 +40,20 @@
         <button id="openRubinot" class="secondary" type="button" hidden>Resolver Cloudflare</button>
       </section>
 
+      <form id="importForm" class="import-form panel" hidden>
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">RubinOT</p>
+            <h2>Importar leitura</h2>
+          </div>
+          <button id="openRubinotJson" class="secondary" type="button">Abrir JSON do RubinOT</button>
+        </div>
+        <label>JSON do ranking<textarea id="importPayload" rows="6" placeholder='{"players":[...]}'></textarea></label>
+        <div class="form-actions">
+          <button id="importRanking" class="primary" type="submit">Importar leitura</button>
+        </div>
+      </form>
+
       <section id="homeView" class="view active">
         <section class="hero compact-hero">
           <div class="hero-copy">
@@ -124,14 +138,6 @@
               <label>Usuario<input id="loginUser" autocomplete="username" value="admin"></label>
               <label>Senha<input id="loginPassword" type="password" autocomplete="current-password"></label>
               <button class="primary" type="submit">Entrar</button>
-            </form>
-
-            <form id="importForm" class="import-form" hidden>
-              <label>Importar JSON do RubinOT<textarea id="importPayload" rows="6" placeholder='{"players":[...]}'></textarea></label>
-              <div class="form-actions">
-                <button id="openRubinotJson" class="secondary" type="button">Abrir JSON do RubinOT</button>
-                <button id="importRanking" class="secondary" type="submit">Importar leitura</button>
-              </div>
             </form>
 
             <form id="partyForm" class="party-form" hidden>

@@ -332,6 +332,10 @@ main {
   margin-bottom: 16px;
 }
 
+.import-form[hidden] {
+  display: none;
+}
+
 .import-form textarea {
   min-height: 128px;
   resize: vertical;
