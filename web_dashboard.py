@@ -580,7 +580,7 @@ def main() -> None:
     load_dotenv()
     if not DATA_FILE.exists():
         DATA_FILE.write_text('{"players": {}, "days": {}, "config": {}}', encoding="utf-8")
-    host = os.getenv("HOST", "127.0.0.1")
+    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8765"))
     server = ThreadingHTTPServer((host, port), DashboardHandler)
     print(f"Painel aberto em http://{host}:{port}", flush=True)
