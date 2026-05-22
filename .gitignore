@@ -9,3 +9,5 @@ chrome-profile/
 chrome-profile-rubinot/
 chrome-extension/
 *.zip
+# Local env file
+.env
