@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rankzada XP</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="brand">
+        <div class="brand-mark">RZ</div>
+        <div>
+          <p>RubinOT Analytics</p>
+          <h1>Rankzada XP</h1>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Navegacao principal">
+        <button class="nav-tab active" type="button" data-view="homeView">XP</button>
+        <button class="nav-tab" type="button" data-view="partyView">PTs</button>
+      </nav>
+
+      <div class="toolbar">
+        <label class="rank-select">
+          <span>Ranking</span>
+          <select id="bucket"></select>
+        </label>
+        <button id="adminToggle" class="ghost" type="button">Admin</button>
+        <button id="fetchRanking" class="primary" type="button">Atualizar ranking</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="statusPanel" class="status-panel" hidden>
+        <div>
+          <strong id="statusTitle">Status</strong>
+          <p id="statusText"></p>
+        </div>
+        <button id="openRubinot" class="secondary" type="button" hidden>Resolver Cloudflare</button>
+      </section>
+
+      <section id="homeView" class="view active">
+        <section class="hero compact-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">XP do mundo</p>
+            <h2>Evolucao do ranking em tempo real.</h2>
+            <p class="hero-text">Acompanhe o top 100, veja quem ganhou mais XP desde a ultima leitura e mantenha uma base confiavel para comparar as PTs.</p>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <img src="/assets/rankzada-hero.png" alt="">
+          </div>
+        </section>
+
+        <section class="intel-strip" aria-label="Resumo operacional">
+          <article><span>Fonte</span><strong id="sourceStat">-</strong></article>
+          <article><span>Ranking</span><strong id="rankStat">Top 100</strong></article>
+          <article><span>PTs</span><strong id="partyStat">0</strong></article>
+          <article><span>Admin</span><strong id="adminStat">bloqueado</strong></article>
+        </section>
+
+        <section id="xp" class="summary">
+          <article>
+            <span>Maior XP no rank</span>
+            <strong id="highest">-</strong>
+            <small id="highestMeta">-</small>
+          </article>
+          <article>
+            <span>Maior ganho</span>
+            <strong id="bestGain">-</strong>
+            <small id="bestGainMeta">-</small>
+          </article>
+          <article>
+            <span>Menor ganho</span>
+            <strong id="worstGain">-</strong>
+            <small id="worstGainMeta">-</small>
+          </article>
+          <article>
+            <span>Base da leitura</span>
+            <strong id="basis">-</strong>
+            <small id="timeMeta">-</small>
+          </article>
+        </section>
+
+        <section class="panel rank-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Mundo</p>
+              <h2>Rank de XP</h2>
+            </div>
+            <p id="rankHint"></p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Char</th>
+                  <th>Vocacao</th>
+                  <th>Level</th>
+                  <th>XP diaria</th>
+                  <th>Ganho</th>
+                  <th>Rank</th>
+                </tr>
+              </thead>
+              <tbody id="players"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="partyView" class="view">
+        <section class="panel party-admin-shell">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Squads</p>
+              <h2>PTs monitoradas</h2>
+            </div>
+            <p id="partyHint"></p>
+          </div>
+
+          <div id="adminPanel" class="admin-panel" hidden>
+            <form id="loginForm" class="login-form">
+              <label>Usuario<input id="loginUser" autocomplete="username" value="admin"></label>
+              <label>Senha<input id="loginPassword" type="password" autocomplete="current-password"></label>
+              <button class="primary" type="submit">Entrar</button>
+            </form>
+
+            <form id="partyForm" class="party-form" hidden>
+              <div class="form-grid">
+                <label>Nome da PT<input id="partyName" placeholder="Minha PT"></label>
+                <label>Meta de XP<input id="partyTarget" placeholder="1.2bi"></label>
+                <label class="members-field">Integrantes da PT<textarea id="partyMembers" rows="6" placeholder="Char Um&#10;Char Dois&#10;Char Tres&#10;Char Quatro"></textarea></label>
+                <label>Observacao<input id="partyNotes" placeholder="Horario, hunt ou responsavel"></label>
+                <label class="check-inline"><input id="partyHighlight" type="checkbox"> destacar como minha PT</label>
+              </div>
+              <div class="form-actions">
+                <button class="primary" type="submit">Salvar PT</button>
+                <button id="clearPartyForm" type="button">Limpar</button>
+                <button id="logoutAdmin" class="secondary" type="button">Sair</button>
+              </div>
+            </form>
+          </div>
+
+          <div id="parties" class="party-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

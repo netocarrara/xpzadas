@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: rankzada-xp
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python web_dashboard.py
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: RANKZADA_PUBLIC_UPDATE
+        value: "false"
+      - key: RANKZADA_ALLOW_BROWSER_VERIFICATION
+        value: "false"
+      - key: RUBINOT_BASE_URL
+        value: https://rubinot.com.br
+      - key: RUBINOT_DAILY_CATEGORY
+        value: "7"
+      - key: RUBINOT_HIGHSCORE_CATEGORY
+        value: experience
+      - key: RUBINOT_CF_CLEARANCE
+        sync: false
+      - key: RUBINOT_USER_AGENT
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RANKZADA_ADMIN_USER
+        sync: false
+      - key: RANKZADA_ADMIN_PASSWORD
+        sync: false

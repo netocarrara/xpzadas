@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.log
+xp_data.json
+chrome-profile/
+chrome-profile-rubinot/
+chrome-extension/
+*.zip
