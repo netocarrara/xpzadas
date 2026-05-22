@@ -32,6 +32,7 @@ const els = {
   importPayload: document.querySelector("#importPayload"),
   importRanking: document.querySelector("#importRanking"),
   openRubinotJson: document.querySelector("#openRubinotJson"),
+  copyCollectScript: document.querySelector("#copyCollectScript"),
   partyForm: document.querySelector("#partyForm"),
   partyName: document.querySelector("#partyName"),
   partyTarget: document.querySelector("#partyTarget"),
@@ -222,6 +223,7 @@ function renderParties(data) {
 function renderDashboard(data) {
   state.bucket = data.bucket;
   state.rubinotImportUrl = data.rubinotImportUrl || "";
+  state.rubinotPageUrl = data.rubinotPageUrl || "https://rubinot.com.br/highscores";
   renderBuckets(data);
   setLeader("highest", data.leaders.highest, "total");
   setLeader("bestGain", data.leaders.bestGain, "gain");
@@ -437,14 +439,27 @@ async function importRanking(event) {
 }
 
 function openRubinotJson() {
-  const url = state.rubinotImportUrl || "https://rubinot.com.br/api/highscores?world=27&category=experience&vocation=0";
+  const url = state.rubinotPageUrl || "https://rubinot.com.br/highscores";
   const popup = window.open(url, "rubinotHighscores", "popup=yes,width=980,height=720");
   if (!popup) {
-    showStatus("Popup bloqueado", "Permita popups para este site e tente abrir o JSON de novo.");
+    showStatus("Popup bloqueado", "Permita popups para este site e tente abrir o RubinOT de novo.");
     return;
   }
   popup.focus();
-  showStatus("JSON aberto", "No popup, use Ctrl+A e Ctrl+C. Depois cole aqui em Importar JSON do RubinOT.");
+  showStatus("RubinOT aberto", "Clique em Copiar script, cole no Console do RubinOT e depois cole o JSON aqui.");
+}
+
+async function copyCollectScript() {
+  const apiPath = new URL(state.rubinotImportUrl || "https://rubinot.com.br/api/highscores?world=27&category=experience&vocation=0").pathname
+    + new URL(state.rubinotImportUrl || "https://rubinot.com.br/api/highscores?world=27&category=experience&vocation=0").search;
+  const script = `(async()=>{const r=await fetch(${JSON.stringify(apiPath)},{credentials:"include"});const t=await r.text();if(!r.ok)throw new Error("HTTP "+r.status+": "+t);try{await navigator.clipboard.writeText(t);console.log("JSON do RubinOT copiado. Volte ao Rankzada e cole em Importar leitura.");}catch(e){console.log(t)}})();`;
+  try {
+    await navigator.clipboard.writeText(script);
+    showStatus("Script copiado", "No RubinOT, aperte F12, abra Console, cole o script e aperte Enter. Ele copia o JSON para sua area de transferencia.");
+  } catch (error) {
+    els.importPayload.value = script;
+    showStatus("Copie o script", "Nao consegui acessar a area de transferencia. Copiei o script para o campo abaixo; copie ele manualmente e rode no Console do RubinOT.");
+  }
 }
 
 document.querySelectorAll(".nav-tab").forEach((button) => {
@@ -453,6 +468,7 @@ document.querySelectorAll(".nav-tab").forEach((button) => {
 els.openRubinot.addEventListener("click", openRubinot);
 els.fetchRanking.addEventListener("click", updateRanking);
 els.openRubinotJson.addEventListener("click", openRubinotJson);
+els.copyCollectScript.addEventListener("click", copyCollectScript);
 els.adminToggle.addEventListener("click", () => {
   setView("partyView");
   els.adminPanel.hidden = !els.adminPanel.hidden;

@@ -237,6 +237,7 @@ def dashboard_payload(query: dict) -> dict:
         "supabaseConfigured": supabase_configured(),
         "world": configured_rank_world(data),
         "rubinotImportUrl": rubinot_import_url(data),
+        "rubinotPageUrl": os.getenv("RUBINOT_BASE_URL", DEFAULT_RUBINOT_BASE_URL).rstrip("/") + "/highscores",
         "updatedAt": current.get("updated_at", ""),
         "checkedAt": current.get("checked_at", ""),
         "hasPrevious": bool(previous.get("players")),
