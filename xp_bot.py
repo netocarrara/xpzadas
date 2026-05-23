@@ -727,12 +727,85 @@ def append_rank_history(data: dict, bucket: str, entries: list[RankingEntry]) ->
         del history[:-MAX_RANK_HISTORY_ITEMS]
 
 
+def save_rank_history_durable(bucket: str, category: int, world: str, entries: list[RankingEntry]) -> str:
+    try:
+        from supabase_store import save_rank_reading, supabase_configured
+
+        if supabase_configured():
+            return save_rank_reading(bucket, category, world, entries)
+    except Exception as exc:
+        print(f"Falha ao salvar ranking no Supabase: {exc}", flush=True)
+    return ""
+
+
+def rank_cycle_base_snapshot_durable(data: dict, bucket: str, current: Optional[dict[str, dict]] = None) -> dict[str, dict]:
+    local_base = rank_cycle_base_snapshot(data, bucket, current)
+    if local_base:
+        return local_base
+    try:
+        from supabase_store import load_rank_history, supabase_configured
+
+        if not supabase_configured():
+            return {}
+        start, end = rank_cycle_bounds()
+        history = []
+        for reading in load_rank_history(bucket, limit=MAX_RANK_HISTORY_ITEMS):
+            checked_at = parse_rank_history_time(reading)
+            if checked_at and start <= checked_at < end:
+                history.append(reading)
+        if not history:
+            return {}
+        base = history[0].get("players", {})
+        if current is not None and base == current:
+            return {}
+        return base
+    except Exception as exc:
+        print(f"Falha ao carregar base do Supabase: {exc}", flush=True)
+        return {}
+
+
 def parse_member_list(members: str) -> list[str]:
     return [item.strip() for item in re.split(r"[,;\n]+", members) if item.strip()]
 
 
 def configured_parties(data: dict) -> list[dict]:
+    parties = data.setdefault("config", {}).setdefault("parties", [])
+    if parties:
+        return parties
+    try:
+        from supabase_store import load_party_configs, supabase_configured
+
+        if supabase_configured():
+            parties = load_party_configs()
+            if parties:
+                data["config"]["parties"] = parties
+    except Exception as exc:
+        print(f"Falha ao carregar PTs do Supabase: {exc}", flush=True)
     return data.setdefault("config", {}).setdefault("parties", [])
+
+
+def save_party_durable(party: dict) -> bool:
+    try:
+        from supabase_store import save_party_config, supabase_configured
+
+        if supabase_configured():
+            save_party_config(party)
+            return True
+    except Exception as exc:
+        print(f"Falha ao salvar PT no Supabase: {exc}", flush=True)
+    return False
+
+
+def delete_party_durable(name: str) -> bool:
+    try:
+        from supabase_store import delete_party_config, supabase_configured
+
+        if supabase_configured():
+            delete_party_config(name)
+            return True
+    except Exception as exc:
+        print(f"Falha ao remover PT do Supabase: {exc}", flush=True)
+    return False
 
 
 def build_parties_report(data: dict) -> str:
@@ -839,7 +912,7 @@ async def maybe_send_rank_update(data: dict) -> None:
         error_text = ""
     bucket = snapshot_bucket_key(category, world)
     current_snapshot = ranking_snapshot(entries) if entries else {}
-    previous = rank_cycle_base_snapshot(data, bucket, current_snapshot)
+    previous = rank_cycle_base_snapshot_durable(data, bucket, current_snapshot)
 
     channel = bot.get_channel(int(channel_id))
     if channel:
@@ -849,8 +922,9 @@ async def maybe_send_rank_update(data: dict) -> None:
             await channel.send(build_rank_update_report(entries, previous, limit, world))
 
     if entries:
-        data["rank_snapshots"][bucket] = current_snapshot
+        data.setdefault("rank_snapshots", {})[bucket] = current_snapshot
         append_rank_history(data, bucket, entries)
+        save_rank_history_durable(bucket, category, world, entries)
     data["config"]["rank_last_sent"] = now_ts()
     save_data(data)
 
@@ -973,12 +1047,13 @@ async def top_diario(
         return
     bucket = snapshot_bucket_key(selected_category, selected_world)
     current_snapshot = ranking_snapshot(entries)
-    previous = rank_cycle_base_snapshot(data, bucket, current_snapshot)
+    previous = rank_cycle_base_snapshot_durable(data, bucket, current_snapshot)
 
     if salvar_leitura:
-        data["rank_snapshots"][bucket] = current_snapshot
+        data.setdefault("rank_snapshots", {})[bucket] = current_snapshot
         append_rank_history(data, bucket, entries)
         save_data(data)
+        save_rank_history_durable(bucket, selected_category, selected_world, entries)
 
     await interaction.followup.send(
         build_rank_update_report(entries, previous, max(1, min(limite, 20)), selected_world)
@@ -1043,7 +1118,9 @@ async def pt_definir(
         parties.append(payload)
 
     save_data(data)
-    await interaction.response.send_message(f"PT **{party_name}** salva com {len(member_names)} membros.")
+    durable = save_party_durable(payload)
+    suffix = " e sincronizada no Supabase" if durable else ""
+    await interaction.response.send_message(f"PT **{party_name}** salva com {len(member_names)} membros{suffix}.")
 
 
 @bot.tree.command(name="pt_remover", description="Remove uma PT do painel web.")
@@ -1055,11 +1132,13 @@ async def pt_remover(interaction: discord.Interaction, nome: str) -> None:
     kept = [party for party in parties if normalize_name(party.get("name", "")) != key]
     data["config"]["parties"] = kept
     save_data(data)
+    durable = delete_party_durable(nome)
 
     if len(kept) == len(parties):
         await interaction.response.send_message(f"PT **{nome}** nao estava cadastrada.", ephemeral=True)
     else:
-        await interaction.response.send_message(f"PT **{nome}** removida.")
+        suffix = " e removida do Supabase" if durable else ""
+        await interaction.response.send_message(f"PT **{nome}** removida{suffix}.")
 
 
 @bot.tree.command(name="pts", description="Mostra as PTs cadastradas para comparacao.")

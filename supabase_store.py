@@ -261,13 +261,18 @@ def load_rank_history(bucket: str, limit: int = 3) -> list[dict]:
     if not readings:
         return []
 
-    ids = ",".join(reading["id"] for reading in readings)
-    players = get_json(
-        "rank_players"
-        f"?reading_id=in.({ids})"
-        "&select=reading_id,player_key,name,rank,level,points,raw"
-        "&order=rank.asc"
-    )
+    players = []
+    reading_ids = [reading["id"] for reading in readings]
+    for index in range(0, len(reading_ids), 2):
+        ids = ",".join(reading_ids[index : index + 2])
+        players.extend(
+            get_json(
+                "rank_players"
+                f"?reading_id=in.({ids})"
+                "&select=reading_id,player_key,name,rank,level,points,raw"
+                "&order=rank.asc"
+            )
+        )
     by_reading: dict[str, dict[str, dict]] = {}
     for player in players:
         reading_players = by_reading.setdefault(player["reading_id"], {})

@@ -159,7 +159,7 @@ function renderBuckets(data) {
 }
 
 function renderPlayers(data) {
-  const source = data.source === "supabase" ? "Supabase" : "local";
+  const source = data.source?.includes("supabase") ? "Supabase" : "local";
   els.rankHint.textContent = `Top ${data.players.length} de ${data.totalPlayers || data.players.length} personagens - ${source}`;
   els.sourceStat.textContent = source;
   els.rankStat.textContent = `Top ${data.players.length}`;
@@ -274,6 +274,13 @@ function renderDashboard(data) {
   setLeader("worstGain", data.leaders.worstGain, "gain");
   els.basis.textContent = data.hasPrevious ? "ciclo 10:30" : "base do ciclo";
   els.timeMeta.textContent = data.update?.message || data.updatedAt || data.checkedAt || "aguardando snapshot";
+  if (data.supabaseConfigured && data.supabaseError) {
+    showStatus("Supabase com erro", data.supabaseError);
+  } else if (!data.supabaseConfigured) {
+    showStatus("Supabase desligado", "Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY na hospedagem para salvar dados sem reset.");
+  } else if (data.update?.supabase?.error) {
+    showStatus("Nao salvei no Supabase", data.update.supabase.error);
+  }
   renderPlayers(data);
   renderParties(data);
 }
@@ -336,7 +343,11 @@ async function saveParty(event) {
     return;
   }
   clearPartyForm();
-  showStatus("PT salva", "A configuracao foi atualizada no site.");
+  if (data.supabase?.error) {
+    showStatus("PT salva so localmente", data.supabase.error);
+  } else {
+    showStatus("PT salva", data.supabase?.saved ? "A configuracao foi salva no Supabase." : "A configuracao foi atualizada no site.");
+  }
   await loadDashboard();
 }
 
@@ -377,7 +388,11 @@ async function deleteParty(name) {
     showStatus("Nao removi a PT", data.error || "Tente novamente.");
     return;
   }
-  showStatus("PT removida", `${name} saiu do comparativo.`);
+  if (data.supabase?.error) {
+    showStatus("PT removida so localmente", data.supabase.error);
+  } else {
+    showStatus("PT removida", `${name} saiu do comparativo.`);
+  }
   await loadDashboard();
 }
 

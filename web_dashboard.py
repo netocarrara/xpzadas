@@ -340,10 +340,12 @@ def dashboard_payload(query: dict) -> dict:
     limit = dashboard_limit(query)
     local_history = data.get("rank_history", {}).get(bucket, [])
     supabase_history = []
+    supabase_error = ""
     if supabase_configured():
         try:
             supabase_history = load_rank_history(bucket, limit=288)
-        except Exception:
+        except Exception as exc:
+            supabase_error = str(exc)
             supabase_history = []
     history, source = pick_rank_history(local_history, supabase_history)
 
@@ -371,6 +373,8 @@ def dashboard_payload(query: dict) -> dict:
         "totalPlayers": len(all_rows),
         "source": source,
         "supabaseConfigured": supabase_configured(),
+        "supabaseError": supabase_error,
+        "durable": bool(supabase_history) and not supabase_error,
         "world": configured_rank_world(data),
         "rubinotImportUrl": rubinot_import_url(data),
         "rubinotPageUrl": os.getenv("RUBINOT_BASE_URL", DEFAULT_RUBINOT_BASE_URL).rstrip("/") + "/highscores",
@@ -608,11 +612,13 @@ def save_party(payload: dict) -> dict:
         parties.append(party)
     data.setdefault("config", {})["parties"] = parties
     safe_save_data(data)
+    supabase = {"configured": supabase_configured(), "saved": False, "error": ""}
     try:
         save_party_config(party)
-    except Exception:
-        pass
-    return {"ok": True, "party": party, "parties": parties}
+        supabase["saved"] = supabase["configured"]
+    except Exception as exc:
+        supabase["error"] = str(exc)
+    return {"ok": True, "party": party, "parties": parties, "supabase": supabase}
 
 
 def remove_party(payload: dict) -> dict:
@@ -622,11 +628,13 @@ def remove_party(payload: dict) -> dict:
     parties = [party for party in configured_parties(data) if normalize_name(party.get("name", "")) != key]
     data.setdefault("config", {})["parties"] = parties
     safe_save_data(data)
+    supabase = {"configured": supabase_configured(), "saved": False, "error": ""}
     try:
         delete_party_config(name)
-    except Exception:
-        pass
-    return {"ok": True, "parties": parties}
+        supabase["saved"] = supabase["configured"]
+    except Exception as exc:
+        supabase["error"] = str(exc)
+    return {"ok": True, "parties": parties, "supabase": supabase}
 
 
 def update_ranking() -> dict:
