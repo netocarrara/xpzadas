@@ -131,8 +131,41 @@ def format_bucket(data: dict) -> str:
     return snapshot_bucket_key(category, world)
 
 
-def player_rows(current: dict, previous: dict) -> list[dict]:
+def cycle_progress(current: dict) -> float:
+    start, end = rank_cycle_bounds()
+    checked_at = parse_rank_history_time(current) or start
+    elapsed = max(0, min((checked_at - start).total_seconds(), (end - start).total_seconds()))
+    return elapsed / max(1, (end - start).total_seconds())
+
+
+def player_cycle_events(history: list[dict]) -> dict[str, dict]:
+    events: dict[str, dict] = {}
+    for previous, current in zip(history, history[1:]):
+        previous_players = previous.get("players", {})
+        current_players = current.get("players", {})
+        checked_at = current.get("checked_at", "")
+        for key, player in current_players.items():
+            old = previous_players.get(key)
+            if not old:
+                continue
+            delta = int(player.get("points", 0)) - int(old.get("points", 0))
+            level_delta = int(player.get("level", 0) or 0) - int(old.get("level", 0) or 0)
+            item = events.setdefault(
+                key,
+                {"deathCount": 0, "xpLost": 0, "lastDeathAt": "", "levelUps": 0},
+            )
+            if delta < 0:
+                item["deathCount"] += 1
+                item["xpLost"] += abs(delta)
+                item["lastDeathAt"] = checked_at
+            if level_delta > 0:
+                item["levelUps"] += level_delta
+    return events
+
+
+def player_rows(current: dict, previous: dict, events: dict[str, dict] | None = None) -> list[dict]:
     rows = []
+    events = events or {}
     previous_players = previous.get("players", {})
     for key, player in current.get("players", {}).items():
         old = previous_players.get(key)
@@ -152,7 +185,11 @@ def player_rows(current: dict, previous: dict) -> list[dict]:
                 "vocation": player.get("vocation", ""),
                 "world": player.get("world", ""),
                 "points": points,
-                "gainSinceLast": None if old_points is None else max(0, points - old_points),
+                "gainSinceLast": None if old_points is None else points - old_points,
+                "deathCount": int(events.get(key, {}).get("deathCount", 0)),
+                "xpLost": int(events.get(key, {}).get("xpLost", 0)),
+                "lastDeathAt": events.get(key, {}).get("lastDeathAt", ""),
+                "levelUps": int(events.get(key, {}).get("levelUps", max(0, level - old_level))),
                 "rankMove": old_rank - rank,
                 "updatedAt": player.get("updated_at") or current.get("updated_at"),
                 "checkedAt": player.get("checked_at") or current.get("checked_at"),
@@ -188,7 +225,7 @@ def configured_parties(data: dict) -> list[dict]:
     return parties
 
 
-def party_rows(data: dict, rows: list[dict], previous: dict) -> list[dict]:
+def party_rows(data: dict, rows: list[dict], previous: dict, progress: float) -> list[dict]:
     by_key = {row["key"]: row for row in rows}
     previous_players = previous.get("players", {})
     parties = configured_parties(data)
@@ -197,7 +234,11 @@ def party_rows(data: dict, rows: list[dict], previous: dict) -> list[dict]:
     for party in parties:
         members = []
         total = 0
-        gain = 0
+        net_gain = 0
+        gross_gain = 0
+        xp_lost = 0
+        deaths = 0
+        level_ups = 0
         missing = []
         target = int(party.get("target_xp", 0) or 0)
         for member in party.get("members", []):
@@ -208,13 +249,34 @@ def party_rows(data: dict, rows: list[dict], previous: dict) -> list[dict]:
                 continue
             old = previous_players.get(key)
             member_gain = row["points"] - int(old.get("points", 0)) if old else None
-            members.append({**row, "gainSinceLast": None if member_gain is None else max(0, member_gain)})
+            member_loss = max(0, -member_gain) if member_gain is not None else int(row.get("xpLost", 0))
+            members.append(
+                {
+                    **row,
+                    "gainSinceLast": member_gain,
+                    "grossGain": None if member_gain is None else max(0, member_gain),
+                    "xpLost": max(int(row.get("xpLost", 0)), member_loss),
+                }
+            )
             total += row["points"]
             if member_gain is not None:
-                gain += max(0, member_gain)
+                net_gain += member_gain
+                gross_gain += max(0, member_gain)
+                xp_lost += max(int(row.get("xpLost", 0)), member_loss)
+            deaths += int(row.get("deathCount", 0))
+            level_ups += int(row.get("levelUps", 0))
 
         member_count = max(1, len(party.get("members", [])))
-        current_gain = gain if previous_players else None
+        current_gain = net_gain if previous_players else None
+        projected_gain = None
+        projected_missing = None
+        target_status = "sem meta"
+        if current_gain is not None and progress > 0:
+            projected_gain = int(current_gain / progress)
+        if target > 0 and projected_gain is not None:
+            projected_missing = max(0, target - projected_gain)
+            target_status = "alcanca" if projected_gain >= target else "nao alcanca"
+
         if target > 0 and current_gain is not None:
             ratio = current_gain / target
             status = "Excelente" if ratio >= 1.1 else "Boa" if ratio >= 0.9 else "Ruim"
@@ -232,8 +294,16 @@ def party_rows(data: dict, rows: list[dict], previous: dict) -> list[dict]:
                 "targetXp": target,
                 "totalDaily": total,
                 "gainSinceLast": current_gain,
+                "grossGain": None if not previous_players else gross_gain,
+                "xpLost": xp_lost,
+                "deathCount": deaths,
+                "levelUps": level_ups,
                 "averagePerMember": None if current_gain is None else current_gain / member_count,
                 "missingToTarget": missing_xp,
+                "projectedGain": projected_gain,
+                "projectedMissing": projected_missing,
+                "targetStatus": target_status,
+                "cycleProgress": progress,
                 "status": status,
                 "notes": party.get("notes", ""),
             }
@@ -250,6 +320,9 @@ def party_rows(data: dict, rows: list[dict], previous: dict) -> list[dict]:
                 item["status"] = "Excelente" if ratio >= 1.15 else "Boa" if ratio >= 0.85 else "Ruim"
                 item["missingToTarget"] = max(0, average_gain - item["gainSinceLast"])
                 item["targetXp"] = int(average_gain)
+                if item["projectedGain"] is not None:
+                    item["projectedMissing"] = max(0, item["targetXp"] - item["projectedGain"])
+                    item["targetStatus"] = "alcanca" if item["projectedGain"] >= item["targetXp"] else "nao alcanca"
     return result
 
 
@@ -286,7 +359,8 @@ def dashboard_payload(query: dict) -> dict:
 
     current = history[-1] if history else {"players": {}}
     previous = cycle_base_reading(history, current)
-    all_rows = player_rows(current, previous)
+    progress = cycle_progress(current)
+    all_rows = player_rows(current, previous, player_cycle_events(history))
     rows = all_rows[:limit]
     gain_rows = [row for row in rows if row["gainSinceLast"] is not None]
 
@@ -305,9 +379,10 @@ def dashboard_payload(query: dict) -> dict:
         "cycleKey": rank_cycle_key(),
         "cycleStart": rank_cycle_bounds()[0].isoformat(timespec="minutes"),
         "cycleEnd": rank_cycle_bounds()[1].isoformat(timespec="minutes"),
+        "cycleProgress": progress,
         "hasPrevious": bool(previous.get("players")),
         "players": rows,
-        "parties": party_rows(data, all_rows, previous),
+        "parties": party_rows(data, all_rows, previous, progress),
         "leaders": {
             "highest": rows[0] if rows else None,
             "bestGain": max(gain_rows, key=lambda item: item["gainSinceLast"]) if gain_rows else None,

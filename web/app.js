@@ -1,4 +1,4 @@
-const state = { bucket: "", dashboard: null, view: "homeView" };
+const state = { bucket: "", dashboard: null, view: "homeView", selectedParty: "all" };
 
 const els = {
   bucket: document.querySelector("#bucket"),
@@ -22,6 +22,7 @@ const els = {
   rankStat: document.querySelector("#rankStat"),
   partyStat: document.querySelector("#partyStat"),
   adminStat: document.querySelector("#adminStat"),
+  partyFilter: document.querySelector("#partyFilter"),
   parties: document.querySelector("#parties"),
   players: document.querySelector("#players"),
   adminPanel: document.querySelector("#adminPanel"),
@@ -93,7 +94,10 @@ function bucketLabel(bucket) {
 
 function signedXp(value) {
   if (value === null || value === undefined) return "base inicial";
-  return `+${formatXp(value)}`;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  if (number < 0) return `-${formatXp(Math.abs(number))}`;
+  return `+${formatXp(number)}`;
 }
 
 function moveText(value) {
@@ -107,6 +111,18 @@ function performanceClass(status) {
   if (status === "Boa") return "good";
   if (status === "Ruim") return "bad";
   return "waiting";
+}
+
+function percent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0%";
+  return `${Math.round(number * 100)}%`;
+}
+
+function deathText(count) {
+  const number = Number(count || 0);
+  if (!number) return "sem mortes";
+  return number === 1 ? "1 queda" : `${number} quedas`;
 }
 
 function setView(view) {
@@ -152,7 +168,7 @@ function renderPlayers(data) {
 
   for (const player of data.players) {
     const tr = document.createElement("tr");
-    const gainClass = player.gainSinceLast > 0 ? "positive" : "neutral";
+    const gainClass = player.gainSinceLast > 0 ? "positive" : player.gainSinceLast < 0 ? "negative" : "neutral";
     tr.innerHTML = `
       <td>#${player.rank}</td>
       <td><strong>${escapeHtml(player.name)}</strong></td>
@@ -170,6 +186,15 @@ function renderParties(data) {
   state.dashboard = data;
   els.partyHint.textContent = data.hasPrevious ? "analise desde a base das 10:30" : "aguardando a segunda leitura do ciclo";
   els.parties.innerHTML = "";
+  const selectedParty = state.selectedParty || "all";
+  els.partyFilter.innerHTML = "";
+  [{ name: "all", label: "Todas as PTs" }, ...data.parties.map((party) => ({ name: party.name, label: party.name }))].forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.name;
+    option.textContent = item.label;
+    option.selected = item.name === selectedParty;
+    els.partyFilter.append(option);
+  });
 
   if (!data.parties.length) {
     els.parties.innerHTML = `<article class="party empty-party"><h3>Nenhuma PT cadastrada</h3><p>Entre como admin para cadastrar uma PT com 4 ou 5 integrantes.</p></article>`;
@@ -178,17 +203,25 @@ function renderParties(data) {
 
   const highlighted = data.parties.find((party) => party.highlight) || null;
   const orderedParties = highlighted ? [highlighted, ...data.parties.filter((party) => party !== highlighted)] : data.parties;
+  const visibleParties = selectedParty === "all" ? orderedParties : orderedParties.filter((party) => party.name === selectedParty);
 
-  for (const party of orderedParties) {
+  for (const party of visibleParties) {
     const score = data.hasPrevious ? party.gainSinceLast : party.totalDaily;
     const target = party.targetXp ? formatXp(party.targetXp) : "media das PTs";
     const missing = party.missingToTarget === null || party.missingToTarget === undefined ? "sem meta" : formatXp(party.missingToTarget);
+    const projected = party.projectedGain === null || party.projectedGain === undefined ? "aguardando" : formatXp(party.projectedGain);
+    const projectedMissing = party.projectedMissing === null || party.projectedMissing === undefined ? "sem meta" : formatXp(party.projectedMissing);
+    const targetStatus = party.targetStatus === "alcanca" ? "alcanca" : party.targetStatus === "nao alcanca" ? "nao alcanca" : "sem meta";
+    const scoreClass = score < 0 ? "negative" : "positive";
     const members = party.members.map((member) => `
       <tr>
         <td><strong>${escapeHtml(member.name)}</strong></td>
         <td>${escapeHtml(member.vocation || "-")}</td>
         <td>${member.level || "-"} ${moveText(member.levelMove)}</td>
-        <td>${signedXp(member.gainSinceLast)}</td>
+        <td class="${member.gainSinceLast < 0 ? "negative" : "positive"}">${signedXp(member.gainSinceLast)}</td>
+        <td>${member.levelUps || 0}</td>
+        <td class="${member.xpLost ? "negative" : "neutral"}">${formatXp(member.xpLost || 0)}</td>
+        <td>${deathText(member.deathCount || 0)}</td>
       </tr>
     `).join("");
 
@@ -201,18 +234,27 @@ function renderParties(data) {
           <h3>${escapeHtml(party.name)}</h3>
           <p>${escapeHtml(party.notes || "")}</p>
         </div>
-        <div class="party-score">${formatXp(score)}</div>
+        <div class="party-score ${scoreClass}">${signedXp(score)}</div>
       </div>
       <div class="party-metrics">
         <span class="badge ${performanceClass(party.status)}">${party.status}</span>
-        <span>Meta <strong>${target}</strong></span>
+        <span>Saldo <strong>${signedXp(party.gainSinceLast)}</strong></span>
+        <span>Ganho bruto <strong>${formatXp(party.grossGain)}</strong></span>
+        <span>Perda XP <strong>${formatXp(party.xpLost)}</strong></span>
+        <span>Mortes <strong>${deathText(party.deathCount)}</strong></span>
+        <span>Level ups <strong>${party.levelUps || 0}</strong></span>
         <span>Media/membro <strong>${formatXp(party.averagePerMember)}</strong></span>
-        <span>Faltou <strong>${missing}</strong></span>
+        <span>Meta <strong>${target}</strong></span>
+        <span>Falta agora <strong>${missing}</strong></span>
+        <span>Projecao 24h <strong>${projected}</strong></span>
+        <span>Constancia <strong>${targetStatus}</strong></span>
+        <span>Falta projetada <strong>${projectedMissing}</strong></span>
+        <span>Ciclo <strong>${percent(party.cycleProgress)}</strong></span>
       </div>
       <div class="mini-table">
         <table>
-          <thead><tr><th>Char</th><th>Vocacao</th><th>Level</th><th>XP</th></tr></thead>
-          <tbody>${members || `<tr><td colspan="4">Nenhum membro encontrado no top carregado.</td></tr>`}</tbody>
+          <thead><tr><th>Char</th><th>Vocacao</th><th>Level</th><th>Saldo XP</th><th>Ups</th><th>Perda</th><th>Mortes</th></tr></thead>
+          <tbody>${members || `<tr><td colspan="7">Nenhum membro encontrado no top carregado.</td></tr>`}</tbody>
         </table>
       </div>
       ${party.missing.length ? `<div class="missing">Nao achei: ${party.missing.map(escapeHtml).join(", ")}</div>` : ""}
@@ -514,6 +556,10 @@ els.parties.addEventListener("click", (event) => {
 els.bucket.addEventListener("change", () => {
   state.bucket = els.bucket.value;
   loadDashboard();
+});
+els.partyFilter.addEventListener("change", () => {
+  state.selectedParty = els.partyFilter.value;
+  if (state.dashboard) renderParties(state.dashboard);
 });
 
 loadAuth().finally(() => loadDashboard()).catch((error) => {

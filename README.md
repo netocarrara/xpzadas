@@ -12,7 +12,7 @@ Fluxo pratico:
 Fluxo opcional por personagem:
 
 - voce cadastra os 4 personagens uma vez
-- a primeira leitura do dia vira a XP inicial
+- a primeira leitura do ciclo vira a XP inicial
 - cada atualizacao consulta o highscore do RubinOT
 - o bot mostra level, XP inicial, XP atual, XP feita e XP justa
 - player `x5` e comparado como `XP feita / 5`
@@ -102,7 +102,7 @@ Abra:
 http://127.0.0.1:8765
 ```
 
-O painel usa o `xp_data.json`. Para ter ganho desde a ultima leitura, salve pelo menos duas leituras com `/top_diario salvar_leitura:True` ou deixe o `/canal_rank` rodando automaticamente.
+O painel usa o `xp_data.json`. O ciclo padrao comeca as 10:30 no fuso `America/Sao_Paulo`; a base de ganho e level fica fixa ate o proximo ciclo. Para ter ganho no painel, salve pelo menos duas leituras com `/top_diario salvar_leitura:True` ou deixe o `/canal_rank` rodando automaticamente.
 
 Tambem da para clicar em **Consultar RubinOT** no painel. Esse botao chama o Python local, consulta o RubinOT, salva a leitura e atualiza os calculos.
 

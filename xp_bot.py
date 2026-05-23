@@ -90,7 +90,7 @@ class RankingEntry:
 
 
 def today_key() -> str:
-    return date.today().isoformat()
+    return rank_cycle_key()
 
 
 def now_text() -> str:
@@ -711,13 +711,15 @@ def append_rank_history(data: dict, bucket: str, entries: list[RankingEntry]) ->
         last = history[-1]
         last_players = last.get("players", {})
         same_update = last.get("updated_at") == entries[0].updated_at
-        same_points = all(
-            key in last_players and int(last_players[key].get("points", 0)) == int(player.get("points", 0))
+        same_snapshot = all(
+            key in last_players
+            and int(last_players[key].get("rank", 0)) == int(player.get("rank", 0))
+            and int(last_players[key].get("level", 0)) == int(player.get("level", 0))
+            and int(last_players[key].get("points", 0)) == int(player.get("points", 0))
             for key, player in snapshot.items()
-        )
-        if same_update and same_points:
-            last["checked_at"] = now_rank_text()
-            last["players"] = snapshot
+        ) and len(last_players) == len(snapshot)
+        if same_update and same_snapshot:
+            last["last_seen_at"] = now_rank_text()
             return
 
     history.append({"checked_at": now_rank_text(), "updated_at": entries[0].updated_at, "players": snapshot})
